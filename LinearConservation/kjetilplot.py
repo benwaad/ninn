@@ -1,3 +1,12 @@
+'''
+The savePlot function in this script adds a watermark to the
+active matplotlib plot containing information about the current
+git commit. This is very useful for reproducability.
+Thank you to Kjetil Olsen Lye for the template to this code.
+Some changes were made in order to, among other things, respect
+directory structure and allow storage in PDF format.
+'''
+
 AUTHORS = "Bendik Skundberg Waade @ NTNU <bendik@waade.net>"
 import glob
 import sys
@@ -60,7 +69,7 @@ except:
     def add_git_information(filename):
         pass
 
-
+    print('Unable to import git')
     def get_git_metadata():
         return {'git_commit': 'unknown',
                 'git_repo_modified': 'unknown',
@@ -240,7 +249,7 @@ def savePlot(name):
 
         informationText = informationText.replace('_', '\\_')
         text_function(0.95, 0.01, informationText,
-                      fontsize=3, color=textcolor,
+                      fontsize=4, color=textcolor,
                       family='monospace',
                       ha='right', va='bottom', alpha=0.5, transform=ax.transAxes)
     except:
