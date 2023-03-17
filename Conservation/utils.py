@@ -22,10 +22,13 @@ def create_animation_artists(ax: plt.Axes, tgrid, xgrid, *args):
     return artists
 
 def animate(name, tgrid, xgrid, *args):
+    '''Send true solution last'''
+    total_time = 2000 # ms
+    fps = 5
     fig, ax = plt.subplots(1,1,figsize=(5,5))
     artists = create_animation_artists(ax, tgrid, xgrid, *args)
-    anim = animation.ArtistAnimation(fig, artists, interval=100, repeat=True)
-    writer = animation.FFMpegWriter(fps=60)
+    anim = animation.ArtistAnimation(fig, artists, interval=fps*total_time / len(artists), repeat=True)
+    writer = animation.FFMpegWriter(fps=fps)
     anim.save(name, writer=writer)
 
 def get_model():

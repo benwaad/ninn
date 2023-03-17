@@ -13,7 +13,7 @@ class Solver:
         self.xgrid = np.linspace(-1,1,M+1)[:-1]
         dx = self.xgrid[1] - self.xgrid[0]
         self.dx = dx
-        T = 2
+        T = .2
         dt = cfl*dx/np.max(np.abs(init(self.xgrid)))
         self.tgrid = np.linspace(0, T, int(T/dt))
         self.dt = self.tgrid[1] - self.tgrid[0]
@@ -29,8 +29,8 @@ class Solver:
         u_iph = (u_bc+u_br)/2
         u_imh = (u_bc+u_bl)/2
         tmp = u_bc - r/2*(F_br-F_bl)
-        nosource = tmp + r**2/2*(u_iph*(F_br-F_bc) - u_imh*(F_bc-F_bl))
-        return nosource + dt/2*(q_bc+q_tc) + dt/4*(u_iph*(q_br-q_bc) - u_imh*(q_bc-q_bl))
+        nosource = tmp + r/2*(u_iph*(F_br-F_bc) - u_imh*(F_bc-F_bl))
+        return nosource + dt/2*(q_bc+q_tc) - dt/4*(u_iph*(q_br-q_bc) - u_imh*(q_bc-q_bl))
     
     def solve(self):
         tgrid = self.tgrid
@@ -63,15 +63,15 @@ def learn_nonlinear_source():
     # F = lambda u: u
     # init = lambda x: -np.sin(np.pi*x)
     def init(x):
-        return .5*np.sin(np.pi*x)
+        return -np.sin(np.pi*x)
     # q = lambda t,x: .5*np.sin(np.pi*t*x)
     # def q(t,x):
     #     hat = np.where(abs(x+.5)<0.2, 0.5, 0)
     #     return hat# * np.cos(np.pi*t)
-    q = lambda t,x: np.exp(-50*(x+.5)**2)/3# * np.cos(2*np.pi*t)
+    q = lambda t,x: 5*np.exp(-20*(x+.5)**2)# * np.cos(2*np.pi*t)
     # q = lambda t,x: 0.
-    M = 50
-    solver = Solver(F, init, q, cfl=.2, M=M)
+    M = 100
+    solver = Solver(F, init, q, cfl=.1, M=M)
     V = solver.solve()
     tgrid, xgrid = solver.tgrid, solver.xgrid
     Xn, Xw, Xp, Xe = utils.LW_create_coordinate_arrays(tgrid[:-1], xgrid)
@@ -103,7 +103,7 @@ def train_and_predict(q, solver, dataset: tf.data.Dataset):
     qhat_train.compile(loss=loss, optimizer=tf.keras.optimizers.legacy.Adam(learning_rate=0.005))
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='loss', patience=20, restore_best_weights=True), utils.LowkeyLogger(10)]
     # callbacks.append()
-    hist = qhat_train.fit(dataset, epochs=50, vex   rbose=0, callbacks=callbacks) # type: ignore
+    hist = qhat_train.fit(dataset, epochs=100, verbose=0, callbacks=callbacks) # type: ignore
     fig, ax = plt.subplots(1,1,figsize=(5,5))
     ax.plot(hist.history['loss'])
     ax.set_yscale('log')
@@ -119,7 +119,7 @@ def train_and_predict(q, solver, dataset: tf.data.Dataset):
     predicted = qhat.predict(X_test).reshape(true.shape)    # type: ignore
     qhat.save('Conservation/models/multisymbolic')
     # ------------- PLOTTING -------------
-    utils.animate('Conservation/sinusoidal_source/burgers_learned.mp4', tgrid_test, xgrid_test, predicted, true)
+    utils.animate('Conservation/gaussian_source/burgers_learned.mp4', tgrid_test, xgrid_test, predicted, true)
     
 
 
