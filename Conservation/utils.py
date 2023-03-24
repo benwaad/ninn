@@ -61,7 +61,7 @@ def get_multisymbolic_model():
     # model.compile(loss=loss, optimizer=tfk.optimizers.legacy.Adam(learning_rate=0.005))
     return model
 
-def create_coordinate_array(tgrid, xgrid):
+def create_coordinate_arrays(tgrid, xgrid):
     t, x = np.meshgrid(tgrid, xgrid)
     t, x = t.flatten(), x.flatten()
     coords = np.column_stack([t, x])

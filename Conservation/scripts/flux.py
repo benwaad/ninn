@@ -19,7 +19,7 @@ class LW(Scheme):
     def step(self, west, centre, east):
         pass
 
-class Rusanov(Scheme):
+class Godunov(Scheme):
     def __init__(self, flux_fnc, dt, dx):
         super().__init__(flux_fnc, dt, dx)
     def step(self):

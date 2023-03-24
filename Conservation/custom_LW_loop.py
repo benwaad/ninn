@@ -8,15 +8,15 @@ tfk = tf.keras
 # dx = 0.01
 # dt = 0.001
 amax = 3
-T = 0.2
-cfl = .2
-M = 100
+T = .2
+cfl = .7
+M = 300
 N = int(amax*T*M/(2*cfl))
 
 F = lambda u: u**2/2
 init = lambda x: -np.sin(np.pi*x)
 # q = lambda p: 2*np.exp(-20*(p[1]+.5)**2) * np.cos(2*np.pi*p[0])
-q = lambda p: np.where(abs(p[1]+.5)<.2, .5, 0)
+q = lambda p: np.where(abs(p[1]+.5)<.2, .5, 0) * np.cos(2*np.pi*p[0])
 
 def get_model():
     tfkl = tfk.layers
@@ -57,7 +57,7 @@ def solve():
         V[-1,n+1] = LW_step(V[-2,n], V[-1,n], V[0,n], q((t,1-dx)), dt, dx)
     return tgrid, xgrid, V
 
-def test_solve():
+def test_solve(model_dir, hist_dir):
     tgrid, xgrid, V = solve()
     # utils.animate('Conservation/custom_test.mp4', tgrid, xgrid, V)
     # tt, xx = np.meshgrid(tgrid, xgrid)
@@ -110,23 +110,44 @@ def test_solve():
         if (epoch+1)%10 == 0:
             tf.print(f'Epoch {epoch+1:2d}, loss = {loss_avg.result():5.2e}, elapsed = {time.time()-start:5.1f}')
         loss_avg.reset_states()
-    
-    model.save('Conservation/models/single_eval')
-    preds = model.predict(X).flatten()
+    #np.save(hist_dir, np.array(history),allow_pickle=True)
+    #model.save(model_dir)
+
+    # Integrates the results along certain time slices
+    q_hat = lambda p: model(np.array([[p[0], p[1]]])).numpy().flatten()  # type: ignore
+    times, ints = integrate(q_hat)
+    print('Time slices: ', times)
+    print('Integrals  : ', ints)
+
+    xgrid_test = np.linspace(-1,1,31)[:-1]
+    tgrid_test = np.linspace(0,T,30)
+    xgrid_test, tgrid_test = np.meshgrid(xgrid_test, tgrid_test)
+    xgrid_test, tgrid_test = xgrid_test.flatten(), tgrid_test.flatten()
+    X_test = np.column_stack([tgrid_test, xgrid_test])
+    preds = model.predict(X_test).flatten()
     # fig, (ax,ax2) = plt.subplots(1, 2, projection='3d')
     fig = plt.figure()
     ax = fig.add_subplot(1,2,1, projection='3d')
-    ax.plot_trisurf(X[:,0], X[:,1], preds) # type:ignore
+    ax.plot_trisurf(X_test[:,0], X_test[:,1], preds) # type:ignore
     ax.set_xlabel('$t$')
     ax.set_ylabel('$x$')
     ax2 = fig.add_subplot(1,2,2, projection='3d')
-    ax2.plot_trisurf(X[:,0], X[:,1], np.apply_along_axis(q,1,X)) # type:ignore
+    ax2.plot_trisurf(X_test[:,0], X_test[:,1], np.apply_along_axis(q,1,X_test)) # type:ignore
     ax2.set_xlabel('$t$')
     ax2.set_ylabel('$x$')
     plt.show()
 
 
-
+def integrate(q_hat ):
+    from scipy import integrate
+    ints = []
+    times = [0, .05, .1, .15, .2]
+    x = np.linspace(-1,1,100)
+    for ti in times:
+        t = np.ones(len(x))*ti
+        samples = np.apply_along_axis(q_hat, 1, np.column_stack([t,x])).flatten()
+        ints.append(integrate.simpson(samples, x))
+    return times, ints
 
 
 def check():
@@ -183,4 +204,6 @@ def check():
 
 if __name__ == '__main__':
     # check()
-    test_solve()
+    hist_dir = f'Conservation/tests/T_ref/histories/T-{T:.2f}'
+    model_dir = f'Conservation/models/T_ref/T-{T:.2f}'
+    test_solve(model_dir, hist_dir)
