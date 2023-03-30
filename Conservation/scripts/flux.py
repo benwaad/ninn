@@ -3,7 +3,6 @@ import tensorflow as tf
 
 
 
-
 class Scheme:
     def __init__(self, flux_fnc, dt, dx):
         self.F = flux_fnc
@@ -24,5 +23,4 @@ class Godunov(Scheme):
         super().__init__(flux_fnc, dt, dx)
     def step(self):
         pass
-
 
