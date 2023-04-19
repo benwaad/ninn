@@ -107,3 +107,20 @@ class LowkeyLogger(tfk.callbacks.Callback):
     #   curr_acc = logs.get('acc') * 100
       tf.print("epoch = %4d  loss = %5.2e  epoch_avg = %3ds  elapsed = %4ds " \
         % (epoch, curr_loss, n_epoch_time/self.n, elapsed))
+
+
+# ----------------------------------------------------------------
+# ---------------------- Wavefront utils -------------------------
+# ----------------------------------------------------------------
+
+def softargmax(x, xgrid, beta=1e10):
+    # x = tf.convert_to_tensor(x)
+    # x_range = tf.range(x.shape.as_list()[-1], dtype=x.dtype)
+    return tf.reduce_sum(tf.nn.softmax(x*beta) * xgrid, axis=-1)
+
+def softwavefinder(u, xgrid):
+    _u = tf.squeeze(u)
+    dx = xgrid[1]-xgrid[0]
+    padded = tf.pad(_u, [[1,1]], mode='symmetric')
+    ddu = (padded[2:]-2*padded[1:-1]+padded[:-2])/(dx**2)
+    return softargmax(ddu, xgrid)

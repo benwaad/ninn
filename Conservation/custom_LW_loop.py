@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-import utils
+import scripts.utils as utils
 import time
 import os
 from datetime import datetime
