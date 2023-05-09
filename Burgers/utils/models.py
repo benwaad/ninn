@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class DenseNet(nn.Module):
-    def __init__(self):
+    def __init__(self, inp_dim=2):
         super().__init__()
-        self.fc1 = nn.Linear(2,30)
+        self.fc1 = nn.Linear(inp_dim,30)
         self.fc2 = nn.Linear(30,30)
         self.fc3 = nn.Linear(30,30)
         self.out = nn.Linear(30,1)
@@ -25,3 +25,4 @@ class Ensemble(nn.Module):
         for model in self.models:
             preds += model(x)
         return preds / len(self.models)
+
