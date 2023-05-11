@@ -353,17 +353,8 @@ def plot_setup_soldep(config: Config):
     left.set_ylabel('$t$')
     return fig2, fig
 
-def plot_preds_and_path_soldep(model: models.Ensemble, config: Config):
+def plot_preds_and_path_soldep(model: models.Ensemble, config: Config, plot_points=False):
     ref = 100
-    def qhat(t,x,u):
-        tbroad = t.expand(x.shape)
-        inp = torch.column_stack((tbroad,x,u))
-        return model(inp).flatten()
-    predconfig = copy.deepcopy(config)
-    predconfig.source = qhat
-    with torch.no_grad():
-        predpath = get_dataset_soldep(predconfig)
-    
     # tgrid = torch.linspace(0, config.mesh.T, ref, requires_grad=False)
     # xgrid = torch.linspace(-1,1,ref, requires_grad=False)
     # tt,xx = torch.meshgrid(tgrid, xgrid)
@@ -373,7 +364,7 @@ def plot_preds_and_path_soldep(model: models.Ensemble, config: Config):
     one = torch.ones_like(ugrid)
     # coords = torch.column_stack((zero, zero, ugrid))
     tvals_plot = [0.0, 0.5, 1.0]
-    xvals_plot = [-1., 0., 1.]
+    xvals_plot = [-.75, 0., .75]
     args = {t: [] for t in tvals_plot}
     for t in args.keys():
         args[t] = [torch.column_stack((t*one, xvals_plot[k]*one, ugrid)) for k in range(len(xvals_plot))]
@@ -401,18 +392,41 @@ def plot_preds_and_path_soldep(model: models.Ensemble, config: Config):
         # ax.set_ylabel('$t$')
     # ax.invert_yaxis()
     # ax.view_init(elev=16, azim=-160)
+    amax=1.5
+    M_path = 300
+    T = 1
+    cfl=.7
+    N_path = int(amax*T*M_path/(2*cfl))
+    dt = T / (N_path-1)
+    faces = torch.linspace(-1,1,M_path, requires_grad=False)
+    init = lambda x: -torch.sin(torch.pi*x)
+    source = lambda t,x,u: torch.sqrt(torch.abs(u))
+    mesh = flux.Mesh(faces, T, N_path)
+    scheme = flux.Godunov(lambda u:u**2/2,dt,mesh.dx)
+    config_path = Config(init, source, mesh, scheme)
 
-    V = get_dataset_soldep(config)
-    wavefront = [softwavefinder(u,config.mesh.centroids) for u in V.T]
-    tgrid = torch.linspace(0, config.mesh.T, config.mesh.N, requires_grad=False)
+    def qhat(t,x,u):
+        tbroad = t.expand(x.shape)
+        inp = torch.column_stack((tbroad,x,u))
+        return model(inp).flatten()
+    predconfig = copy.deepcopy(config_path)
+    predconfig.source = qhat
+    with torch.no_grad():
+        predpath = get_dataset_soldep(predconfig)
+    tgrid = torch.linspace(0, config_path.mesh.T, config_path.mesh.N, requires_grad=False)
+    V = get_dataset_soldep(config_path)
+    wavefront = [softwavefinder(u,config_path.mesh.centroids) for u in V.T]
     # Crazy oneliner to find the timegrid index of the shock (t=1/pi)
     # Used to plot the true shock line in the path plot
     shock_index = (tgrid>1/torch.pi).nonzero()[0,0]
-    tt,xx = torch.meshgrid(tgrid, config.mesh.centroids)
+    tt,xx = torch.meshgrid(tgrid, config_path.mesh.centroids)
     pathfig = plt.figure(figsize=(5,5))
     ax = pathfig.add_subplot(111) # type: ignore
     im = ax.pcolormesh(xx,tt, predpath.T, cmap='viridis')
     ax.plot(wavefront[shock_index:], tgrid[shock_index:], color='black')
+    scattercoords = torch.cartesian_prod(config.mesh.centroids, torch.linspace(0, config.mesh.T, config.mesh.N, requires_grad=False)[:-1])
+    if plot_points:
+        ax.scatter(scattercoords[:,0], scattercoords[:,1], s=10, c='red', marker='x', linewidths=.5) # type: ignore
     pathfig.colorbar(im)
     ax.set_xlabel('$x$')
     ax.set_ylabel('$t$')
@@ -424,7 +438,7 @@ def main_soldep():
     amax = 1.5
     T = 1
     cfl = .7
-    M = 100
+    M = 8
     N = int(amax*T*M/(2*cfl))
     print(f'INFO: Using N = {N}.')
     dt = T / (N-1)
@@ -439,12 +453,12 @@ def main_soldep():
     path = get_burgers_img_path()
     print('INFO: Image root is', path)
 
-    model, hist = get_trained_ensemble_soldep(config, n_models=5)
-    predfig, uhatfig = plot_preds_and_path_soldep(model, config)
+    model, hist = get_trained_ensemble_soldep(config, n_models=5, epochs=200, force_periodic=False, periodic_net=True)
+    predfig, uhatfig = plot_preds_and_path_soldep(model, config, plot_points=True)
     # prederrfig, uhaterrfig = plot_errors(model, config)
     histfig = plot_history(hist)
     plt.show()
 
 
 if __name__ == '__main__':
-    main()
+    main_soldep()

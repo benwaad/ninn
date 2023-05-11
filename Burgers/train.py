@@ -129,7 +129,30 @@ def make_pointwise_soldep(dataset, config: Config):
     coords = torch.cat([coords, ugrid.reshape((-1,1))], dim=1)
     return coords, target
 
-def train_soldep(model: nn.Module, dataset, config: Config):
+class PeriodicityCorrector:
+    def __init__(self, tgrid, ugrid=None, boundary=[-1.,1.], correction_epocs=5):
+        self.epochs = correction_epocs
+        x_endpoints = torch.tensor(boundary)
+        if ugrid is None:
+            left = torch.cartesian_prod(tgrid, x_endpoints[[0]])
+            right = torch.cartesian_prod(tgrid, x_endpoints[[1]])
+        else:
+            left = torch.cartesian_prod(tgrid, x_endpoints[[0]], ugrid)
+            right = torch.cartesian_prod(tgrid, x_endpoints[[1]], ugrid)
+        dataset = TensorDataset(left, right)
+        self.loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    def correct(self, model: nn.Module):
+        optim = torch.optim.Adam(model.parameters(), lr=0.0005)
+        for epoch in range(self.epochs):
+            for (left_inp, right_inp) in self.loader:
+                optim.zero_grad()
+                left = model(left_inp)
+                right = model(right_inp)
+                loss = ((left-right)**2).sum()
+                loss.backward()
+                optim.step()
+
+def train_soldep(model: nn.Module, dataset, config: Config, epochs, force_periodic):
     M, N = config.mesh.M, config.mesh.N
     dt = config.scheme.dt
     coords, target = make_pointwise_soldep(dataset, config)
@@ -138,10 +161,14 @@ def train_soldep(model: nn.Module, dataset, config: Config):
         west, centre, east, true = torch.unbind(target, dim=1)
         nosource = config.scheme.step(west, centre, east)
         return criterion(nosource+dt*preds.squeeze(), true)
+    force_periodic_tvals = torch.linspace(0, config.mesh.T, 20)
+    force_periodic_uvals = torch.linspace(-2, 2, 20)
+    corrector = PeriodicityCorrector(force_periodic_tvals, force_periodic_uvals, boundary=[-1.,1.], correction_epocs=1)
+    
     optim = torch.optim.Adam(model.parameters(), lr=0.005)
     BATCH_SIZE = 32
-    EPOCHS = 8
-    log_freq = 2
+    EPOCHS = epochs
+    log_freq = math.floor(epochs/4) # TODO: 2
     dataset = TensorDataset(coords, target)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
     history = []
@@ -161,19 +188,21 @@ def train_soldep(model: nn.Module, dataset, config: Config):
             running_loss += loss.item()
             loss_updates += 1
             batch += 1
+        if force_periodic:
+            corrector.correct(model)
         if epoch%log_freq==(log_freq-1):
             print(f'Epoch = {epoch+1}  avg loss = {running_loss/loss_updates:5.2e}')
             running_loss = 0.0
             loss_updates = 0
     return history
 
-def get_trained_ensemble_soldep(config: Config, n_models=5):
+def get_trained_ensemble_soldep(config: Config, n_models=5, epochs=8, force_periodic=False, periodic_net=False):
     dataset = get_dataset_soldep(config)
     histories = []
-    model_list = [models.DenseNet(inp_dim=3) for _ in range(n_models)]
+    model_list = [models.DenseNet(inp_dim=3, periodic=True) for _ in range(n_models)]
     for i, model in enumerate(model_list,1):
         print(f'Training model {i}')
-        hist = train_soldep(model, dataset, config)
+        hist = train_soldep(model, dataset, config, epochs, force_periodic=force_periodic)
         histories.append(torch.tensor(hist,requires_grad=False))
     ensemble = models.Ensemble(model_list)
     histories = torch.stack(histories)
