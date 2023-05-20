@@ -196,10 +196,10 @@ def train_soldep(model: nn.Module, dataset, config: Config, epochs, force_period
             loss_updates = 0
     return history
 
-def get_trained_ensemble_soldep(config: Config, n_models=5, epochs=8, force_periodic=False, periodic_net=False):
+def get_trained_ensemble_soldep(config: Config, n_models=5, epochs=8, force_periodic=False):
     dataset = get_dataset_soldep(config)
     histories = []
-    model_list = [models.DenseNet(inp_dim=3, periodic=True) for _ in range(n_models)]
+    model_list = [models.DenseNet(inp_dim=3) for _ in range(n_models)]
     for i, model in enumerate(model_list,1):
         print(f'Training model {i}')
         hist = train_soldep(model, dataset, config, epochs, force_periodic=force_periodic)

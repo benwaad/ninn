@@ -453,7 +453,7 @@ def main_soldep():
     path = get_burgers_img_path()
     print('INFO: Image root is', path)
 
-    model, hist = get_trained_ensemble_soldep(config, n_models=5, epochs=200, force_periodic=False, periodic_net=True)
+    model, hist = get_trained_ensemble_soldep(config, n_models=5, epochs=200, force_periodic=True)
     predfig, uhatfig = plot_preds_and_path_soldep(model, config, plot_points=True)
     # prederrfig, uhaterrfig = plot_errors(model, config)
     histfig = plot_history(hist)
