@@ -62,7 +62,9 @@ class CUW(Scheme):
         return centre - self.dt/self.dx*(self._halfstep(centre,east)-self._halfstep(west,centre))
     def _halfstep(self, Q_i, Q_ip1):
         aplus, aminus = self.get_a_plus_minus(Q_i, Q_ip1)
-        return (aplus*self.F(Q_i)-aminus*self.F(Q_ip1))/(aplus-aminus) + aplus*aminus/(aplus-aminus)*(Q_ip1-Q_i)
+        flux = (aplus*self.F(Q_i)-aminus*self.F(Q_ip1))/(aplus-aminus) + aplus*aminus/(aplus-aminus)*(Q_ip1-Q_i)
+        return torch.nan_to_num(flux, nan=0.0)   # NaN happens when h=0 both left and right, then flux is 0
+        # return flux
         
     def vectorstep(self, Qn):
         '''Batch dimension is outer'''
@@ -72,17 +74,20 @@ class CUW(Scheme):
         #     west[0] = west[1]
         #     east[-1] = east[-2]
         if not self.periodic:
-            west[0] = west[2]
-            east[-1] = east[-3]
-            west[0,1] = -west[0,1]
-            west[-1,1] = -west[-1,1]
-            east[0,1] = -east[0,1]
-            east[-1,1] = -east[-1,1]
-
+            west[0] = west[1]
+            east[-1] = east[-2]
+            # west[0,1] = -west[0,1]
+            # east[-1,1] = -east[-1,1]
+            west[0,1] = 0.
+            east[-1,1] = 0.
         return self.step(west, Qn, east)
     def get_eigenvals(self, Q):
-        big =  Q[:,1]/Q[:,0] + torch.sqrt(9.81*Q[:,0])
-        small =  Q[:,1]/Q[:,0] - torch.sqrt(9.81*Q[:,0])
+        # h can be zero (Q[:,0]), so we mask it away, letting hu^2 default to zero
+        # mask = (Q[:,0] >= 1e-6)
+        # hu = torch.zeros_like(Q[:,0])
+        hu = Q[:,1]/Q[:,0]
+        big =  hu + torch.sqrt(9.81*Q[:,0])
+        small =  hu - torch.sqrt(9.81*Q[:,0])
         return big, small
     def get_a_plus_minus(self, QL, QR):
         lambda_m_left, lambda_1_left = self.get_eigenvals(QL)
