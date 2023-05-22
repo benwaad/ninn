@@ -120,3 +120,14 @@ def train(model: nn.Module, dataset, config: Config, epochs: int):
             loss_updates = 0
     return history
     
+def get_trained_ensemble(config: Config, n_models=5, epochs=8):
+    dataset = get_dataset(config)
+    histories = []
+    model_list = [models.DenseNet(inp_dim=1) for _ in range(n_models)]
+    for i, model in enumerate(model_list,1):
+        print(f'Training model {i}')
+        hist = train(model, dataset, config, epochs)
+        histories.append(torch.tensor(hist,requires_grad=False))
+    ensemble = models.Ensemble(model_list)
+    histories = torch.stack(histories)
+    return ensemble, torch.mean(histories,0)

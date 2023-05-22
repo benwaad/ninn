@@ -14,36 +14,35 @@ def main():
     amax = 3 + (g*3)**.5
     T = 1.0
     cfl = .8
-    M = 500
+    M = 100
     N = int(amax*T*M/(2*cfl))
     print(f'INFO: Using N = {N}.')
     dt = T / (N-1)
     faces = torch.linspace(-1,1,M, requires_grad=False)
-    anim = True
+    anim = False
 
     # Parameters defining the bathymetry
     mu = .5
     sig = 1/100
     def bathymetry(x):
-        # return torch.exp(-(x-1)**2)
-        ret = np.zeros_like(x)
-        freqs = np.random.uniform(5, 20, 10)
-        for freq in freqs:
-            ret += np.sin(freq*x.numpy() + np.random.uniform(0,6)) / freq
-        ret = ret / len(freqs) + .3
-        return torch.from_numpy(ret)
+        # ret = np.zeros_like(x)
+        # freqs = np.random.uniform(5, 20, 10)
+        # for freq in freqs:
+        #     ret += np.sin(freq*x.numpy() + np.random.uniform(0,6)) / freq
+        # ret = ret / len(freqs) + .3
+        # return torch.from_numpy(ret)
         return torch.exp(-(x-mu)**2/sig)
     def bathym_x(x):
         return -2.*(x-mu)*bathymetry(x)/sig
     def init(x):
         ret = torch.zeros([len(x),2])
-        # ret[:,0] = torch.exp(-100*(x+.5)**2) + 1.5
-        freqs = np.random.uniform(5, 20, 10)
-        for freq in freqs:
-            ret[:,0] += np.sin(freq*x + np.random.uniform(0,6)) / freq
-        ret[:,0] = ret[:,0] / len(freqs) + 1.5
+        # freqs = np.random.uniform(5, 20, 10)
+        # for freq in freqs:
+        #     ret[:,0] += np.sin(freq*x + np.random.uniform(0,6)) / freq
+        # ret[:,0] = ret[:,0] / len(freqs) + 1.5
         # ret[:,0] = .2*torch.sin(4*torch.pi*x) + .5
         # ret[:,0] = torch.where(x<-.7,2,1.5)
+        ret[:,0] = torch.exp(-100*(x+.5)**2) + 1.5
         ret[:,0] = ret[:,0] - bathymetry(x)
         ret[:,1] = 0.
         return ret
@@ -73,22 +72,22 @@ def main():
         for i in range(len(seafloor[0])):
             seafloor[:,i] = bathymetry(config.mesh.centroids)
         relative_surface = dataset[:,:,0].T + seafloor
-        # ----------- ILLUSTRATION -----------
         velocity = (dataset[:,:,1]/dataset[:,:,0]).T
-        histfig = plt.figure("Illustration", figsize=(10,5))
-        # with plt.style.context('ggplot'):   # type: ignore
-        ax = histfig.add_subplot(111)
-        ax.fill_between(config.mesh.centroids, relative_surface[:,0].numpy(), seafloor[:,0].numpy(),alpha=.5, color="#000DFF")
-        ax.fill_between(config.mesh.centroids, seafloor[:,0].numpy(), alpha=.7, color='sienna')
-        ax.vlines([-1,1], 0, 2, color='black', linewidths=.8)
-        ax.set_ylim((0.0,2.0)) # type: ignore
-        # ax.set_xlabel('$x$')
-        ax.get_yaxis().set_visible(False)
-        for spine in ['left', 'top', 'right']:
-            ax.spines[spine].set_visible(False)
-        plt.show()
-        # ------------------------------------
-        return
+        # # ----------- ILLUSTRATION -----------
+        # histfig = plt.figure("Illustration", figsize=(10,5))
+        # # with plt.style.context('ggplot'):   # type: ignore
+        # ax = histfig.add_subplot(111)
+        # ax.fill_between(config.mesh.centroids, relative_surface[:,0].numpy(), seafloor[:,0].numpy(),alpha=.5, color="#000DFF")
+        # ax.fill_between(config.mesh.centroids, seafloor[:,0].numpy(), alpha=.7, color='sienna')
+        # ax.vlines([-1,1], 0, 2, color='black', linewidths=.8)
+        # ax.set_ylim((0.0,2.0)) # type: ignore
+        # # ax.set_xlabel('$x$')
+        # ax.get_yaxis().set_visible(False)
+        # for spine in ['left', 'top', 'right']:
+        #     ax.spines[spine].set_visible(False)
+        # plt.show()
+        # return
+        # # ------------------------------------
         print('Starting animation process...')
         animate('height.mp4', torch.linspace(0,T,N).detach(), config.mesh.centroids, relative_surface, seafloor=seafloor[:,0], total_time=T)
         animate('velocity.mp4', torch.linspace(0,T,N).detach(), config.mesh.centroids, velocity, seafloor=seafloor[:,0], total_time=T, ylims=(-2.,2.))
@@ -97,7 +96,8 @@ def main():
 
     model = models.DenseNet(inp_dim=1)
     start = time.time()
-    history = train(model, dataset, config, epochs=1)
+    # history = train(model, dataset, config, epochs=1)
+    model, history = get_trained_ensemble(config, n_models=5, epochs=1)
     print(f'INFO: Training finished in {time.time()-start:.1f} s.')
     np.save('history.npy', history)
 
