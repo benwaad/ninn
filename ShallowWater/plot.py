@@ -1,11 +1,13 @@
 from train import *
 from utils.tools import animate
-import matplotlib.pyplot as plt
-import numpy as np
 from utils.kjetilplot import savePlot
+
+import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
-import copy
 from scipy.integrate import simpson
+
+import copy
 import math
 import time
 
@@ -22,7 +24,7 @@ def main():
     anim = False
 
     # Parameters defining the bathymetry
-    mu = .5
+    mu = .25
     sig = 1/100
     def bathymetry(x):
         # ret = np.zeros_like(x)
@@ -31,9 +33,12 @@ def main():
         #     ret += np.sin(freq*x.numpy() + np.random.uniform(0,6)) / freq
         # ret = ret / len(freqs) + .3
         # return torch.from_numpy(ret)
-        return torch.exp(-(x-mu)**2/sig)
+        return torch.exp(-(x-mu)**2/sig) + .5*torch.exp(-(x-(mu-.25))**2/sig)
+        # return 2.*x**2
     def bathym_x(x):
-        return -2.*(x-mu)*bathymetry(x)/sig
+        return -2.*(x-mu)*torch.exp(-(x-mu)**2/sig)/sig - .5*2.*(x-(mu-.25))*torch.exp(-(x-(mu-.25))**2/sig)/sig
+        # return 4.*x
+    
     def init(x):
         ret = torch.zeros([len(x),2])
         # freqs = np.random.uniform(5, 20, 10)
@@ -43,7 +48,7 @@ def main():
         # ret[:,0] = .2*torch.sin(4*torch.pi*x) + .5
         # ret[:,0] = torch.where(x<-.7,2,1.5)
         ret[:,0] = torch.exp(-100*(x+.5)**2) + 1.5
-        ret[:,0] = ret[:,0] - bathymetry(x)
+        ret[:,0] = torch.max(ret[:,0] - bathymetry(x), torch.zeros_like(x))
         ret[:,1] = 0.
         return ret
     # def source(t,x,Q):
@@ -97,28 +102,70 @@ def main():
     model = models.DenseNet(inp_dim=1)
     start = time.time()
     # history = train(model, dataset, config, epochs=1)
-    model, history = get_trained_ensemble(config, n_models=5, epochs=1)
+    model, history = get_trained_ensemble(config, n_models=5, epochs=4, fit_direct=False)
     print(f'INFO: Training finished in {time.time()-start:.1f} s.')
     np.save('history.npy', history)
 
-    histfig = plt.figure("History", figsize=(8,5))
+    histfig = plt.figure("history", figsize=(8,5))
     with plt.style.context('ggplot'):   # type: ignore
         ax = histfig.add_subplot(111)
         ax.plot(history)
         ax.set_yscale('log')
         ax.set_xlabel('Iteration')
 
+    # -------------- Plot true and predicted bath --------------
     xgrid = config.mesh.centroids.detach()
-    predfig = plt.figure("Predictions")
+    predfig = plt.figure("preds", figsize=(8,2.6))
     with plt.style.context('ggplot'):   # type: ignore
         ax = predfig.add_subplot(111)
-        ax.plot(xgrid, bathym_x(xgrid), label='$B_x$')
-        ax.plot(xgrid, model(xgrid.reshape((-1,1))).squeeze().detach(), label='Predicted')
+        ax.plot(xgrid, bathymetry(xgrid), label=r'$B(x)$')    # TODO
+        prd = model(xgrid.reshape((-1,1))).squeeze().detach()
+        ax.plot(xgrid, prd-prd[0], label=r'$\hat{B}(x)$')
         ax.set_xlabel('$x$')
         ax.legend()
+    # ----------------------------------------------------------
+
+    # -------------- Plot true and predicted bath_x ------------
+    predfig = plt.figure("diff_preds", figsize=(8,2.6))
+    with plt.style.context('ggplot'):   # type: ignore
+        ax = predfig.add_subplot(111)
+        ax.plot(xgrid, bathym_x(xgrid), label=r'$B_x(x)$')
+        xgrid.requires_grad_(True)
+        prd = model(xgrid.reshape((-1,1))).squeeze()
+        d_prd = torch.autograd.grad(prd, xgrid, torch.ones_like(prd))[0]
+        xgrid.detach_()
+        ax.plot(xgrid, d_prd, label=r'$\hat{B}_x(x)$')
+        ax.set_xlabel('$x$')
+        ax.legend()
+    # ----------------------------------------------------------
+    
+    # -------------- Plot true and predicted wave --------------
+    times = [0, .1, .2]
+    # bhat = lambda x: model(x.reshape((-1,1))).flatten()
+    def bhat(x):
+        x.requires_grad_(True)
+        y = model(x.reshape((-1,1))).flatten()
+        return torch.autograd.grad(y, x, grad_outputs=torch.ones_like(y), create_graph=True)[0]
+    predconfig = Config(config.init, bhat, config.mesh, config.scheme)
+    preddata = get_dataset(predconfig).detach()
+    seafloor = bathymetry(xgrid).numpy()
+    wavefig = plt.figure("wave_preds", figsize=(8,8))
+    with plt.style.context('ggplot'):   # type: ignore
+        for i, t in enumerate(times, start=1):
+            ax = wavefig.add_subplot(len(times), 1, i)
+            idx = int(t/config.scheme.dt)
+            ax.plot(xgrid, dataset[idx,:,0]+seafloor, '--',  color="#9B82D5", label='True')
+            ax.plot(xgrid, preddata[idx,:,0]+seafloor, color="#6533DB", label='Predicted')
+            ax.fill_between(xgrid, seafloor, alpha=.8, color='sienna')
+            ax.set_ylim(0, 2.7)
+            ax.legend(loc='upper right')
+            # ax.set_title(f'{t:.2f} s')
+            ax.annotate(f'$t={t:.2f}$ s', (-0.745,0.7))
+        ax.set_xlabel('$x$')    # Only set x label on bottom axis
+    # ----------------------------------------------------------
+
     
     plt.show()
-
 
 if __name__ == '__main__':
     main()

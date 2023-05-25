@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from utils import flux, models
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
@@ -59,21 +60,22 @@ def make_pointwise(dataset, config: Config):
             west = None if i==0 else dataset[n,i-1,:]   # Ensures periodic BCs (positive a)
             east = None if i==M-1 else dataset[n,i+1,:]
             if west is None:
-                west = dataset[n,i,:]
-                # west[1] = -west[1]
-                west[1] = 0.
+                west = dataset[n,i,:]   # Velocity equal
+                # west[1] = -west[1]    # Velocity reflected
+                # west[1] = 0.          # Velocity 0
             if east is None:
-                east = dataset[n,i,:]
-                # east[1] = -east[1]
-                east[1] = 0.
+                east = dataset[n,i,:]   # Velocity equal
+                # east[1] = -east[1]    # Velocity reflected
+                # east[1] = 0.          # Velocity 0
             qgrid[coord_ind,:] = dataset[n,i,:]
             # (w,c,e,target)
             target_row = [west, dataset[n,i,:], east, dataset[n+1,i,:]]
             target[coord_ind,:,:] = torch.vstack(target_row)
     # coords = torch.cat([coords, ugrid.reshape((-1,1))], dim=1)
+    # coords.requires_grad = True
     return coords, qgrid, target
 
-def train(model: nn.Module, dataset, config: Config, epochs: int):
+def train(model: nn.Module, dataset, config: Config, epochs: int, direct=False):
     # First iteration: No explicit differentiation
     M, N = config.mesh.M, config.mesh.N
     dt = config.scheme.dt
@@ -83,13 +85,17 @@ def train(model: nn.Module, dataset, config: Config, epochs: int):
     def compute_loss(model, coord_batch, Q_batch, target_batch):
         west, centre, east, true = torch.unbind(target_batch, dim=1)
         nosource = config.scheme.step(west, centre, east)
-
-        bath_diff_preds = model(coord_batch[:,1].reshape((-1,1))).squeeze()
-        # sourcepreds = torch.zeros_like(Q_batch)
+        x = coord_batch[:,1].detach()
+        x.requires_grad = True
+        bath_preds = model(x.reshape((-1,1))).flatten()
+        if direct:
+            bath_diff_preds = bath_preds
+        else:
+            bath_diff_preds = torch.autograd.grad(bath_preds, x, grad_outputs=torch.ones_like(bath_preds), create_graph=True)[0]
         sourcepreds = -config.g*Q_batch[:,0]*bath_diff_preds
         return criterion(nosource[:,1]+dt*sourcepreds, true[:,1])
     
-    optim = torch.optim.Adam(model.parameters(), lr=0.005)
+    optim = torch.optim.Adam(model.parameters(), lr=0.0005)
     BATCH_SIZE = 32
     EPOCHS = epochs
     log_freq = max(math.floor(epochs/4), 1) # TODO: 2
@@ -120,14 +126,23 @@ def train(model: nn.Module, dataset, config: Config, epochs: int):
             loss_updates = 0
     return history
     
-def get_trained_ensemble(config: Config, n_models=5, epochs=8):
+def get_trained_ensemble(config: Config, n_models=5, epochs=8, fit_direct=False):
     dataset = get_dataset(config)
     histories = []
     model_list = [models.DenseNet(inp_dim=1) for _ in range(n_models)]
+    best_loss = 1.0
+    best_model = None
+    best_index = 0
     for i, model in enumerate(model_list,1):
         print(f'Training model {i}')
-        hist = train(model, dataset, config, epochs)
+        hist = train(model, dataset, config, epochs, direct=fit_direct)
+        if (loss:=np.mean(np.array(hist)[-1000:])) < best_loss:
+            best_index = i-1
+            best_loss = loss
+            best_model = model
         histories.append(torch.tensor(hist,requires_grad=False))
-    ensemble = models.Ensemble(model_list)
-    histories = torch.stack(histories)
-    return ensemble, torch.mean(histories,0)
+    ensemble = models.Ensemble([best_model for i in range(n_models)])
+    # histories = torch.stack(histories)
+    _histories = histories[best_index]
+    print(f'\nINFO: Selected model {best_index+1}.')
+    return ensemble, _histories#torch.mean(histories,0)

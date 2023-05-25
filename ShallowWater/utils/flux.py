@@ -76,10 +76,10 @@ class CUW(Scheme):
         if not self.periodic:
             west[0] = west[1]
             east[-1] = east[-2]
-            # west[0,1] = -west[0,1]
-            # east[-1,1] = -east[-1,1]
-            west[0,1] = 0.
-            east[-1,1] = 0.
+            # west[0,1] = -west[0,1]         # Velocity reflected
+            # east[-1,1] = -east[-1,1]       # Velocity reflected
+            # west[0,1] = 0.                 # Velocity 0
+            # east[-1,1] = 0.                # Velocity 0
         return self.step(west, Qn, east)
     def get_eigenvals(self, Q):
         # h can be zero (Q[:,0]), so we mask it away, letting hu^2 default to zero

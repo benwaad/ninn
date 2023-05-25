@@ -9,10 +9,11 @@ class DenseNet(nn.Module):
         self.fc2 = nn.Linear(30,30)
         self.fc3 = nn.Linear(30,30)
         self.out = nn.Linear(30,1)
+        self.activation = torch.tanh
     def forward(self, x):
-        x = F.leaky_relu(self.fc1(x))
-        x = F.leaky_relu(self.fc2(x))
-        x = F.leaky_relu(self.fc3(x))
+        x = self.activation(self.fc1(x))
+        x = self.activation(self.fc2(x))
+        x = self.activation(self.fc3(x))
         return self.out(x)
 
 class Ensemble(nn.Module):
