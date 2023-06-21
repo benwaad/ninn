@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from matplotlib import animation
 import matplotlib.pyplot as plt
+import sys, os
 
 def softargmax(u, xgrid, beta=1e10):
     weighted_xpos = xgrid * torch.softmax(u*beta, dim=-1)
@@ -40,3 +41,9 @@ def animate(name, tgrid, xgrid, *args, seafloor=None, total_time=1., ylims=(0.0,
     anim = animation.ArtistAnimation(fig, artists, interval=time_ms / len(artists), repeat=True)
     writer = animation.FFMpegWriter(fps=int(len(artists)/total_time))
     anim.save(name, writer=writer)
+
+
+def disable_print():
+    sys.stdout = open(os.devnull, 'w')
+def enable_print():
+    sys.stdout = sys.__stdout__

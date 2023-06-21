@@ -53,7 +53,7 @@ class Godunov(Scheme):
         return self.step(west, Un, east)
 
 class CUW(Scheme):
-    def __init__(self,F, dt, dx, periodic=True):
+    def __init__(self,F, dt, dx, periodic=False):
         '''Central-Upwind scheme for systems, due to A. Kurganov, G. Petrova, B. Popov. 1D Shallow Water hard coded in.'''
         super().__init__(F,dt,dx)
         self.periodic = periodic

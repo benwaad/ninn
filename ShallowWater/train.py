@@ -6,21 +6,21 @@ from torch.utils.data import TensorDataset, DataLoader
 import math
 from typing import Type
 
-class Bathymetry:
-    @staticmethod
-    def call(x):
-        raise NotImplementedError()
-    @staticmethod
-    def diff(x):
-        raise NotImplementedError()
+# class Bathymetry:
+#     @staticmethod
+#     def call(x):
+#         raise NotImplementedError()
+#     @staticmethod
+#     def diff(x):
+#         raise NotImplementedError()
 
-class ExpSlope(Bathymetry):
-    @staticmethod
-    def call(x):
-        return torch.exp(-(x-1)**2)
-    @staticmethod
-    def diff(x):
-        return -2.*(x-1)*ExpSlope.call(x)
+# class ExpSlope(Bathymetry):
+#     @staticmethod
+#     def call(x):
+#         return torch.exp(-(x-1)**2)
+#     @staticmethod
+#     def diff(x):
+#         return -2.*(x-1)*ExpSlope.call(x)
 
 
 class Config:
@@ -141,8 +141,90 @@ def get_trained_ensemble(config: Config, n_models=5, epochs=8, fit_direct=False)
             best_loss = loss
             best_model = model
         histories.append(torch.tensor(hist,requires_grad=False))
-    ensemble = models.Ensemble([best_model for i in range(n_models)])
+    ensemble = models.Ensemble([best_model])
     # histories = torch.stack(histories)
     _histories = histories[best_index]
     print(f'\nINFO: Selected model {best_index+1}.')
     return ensemble, _histories#torch.mean(histories,0)
+
+
+
+
+def vectorized_train(model: nn.Module, dataset, config: Config, epochs: int):
+    """Dataset can be incomplete, we only need data on u for t>0."""
+    M, N = config.mesh.M, config.mesh.N
+    dt = config.scheme.dt
+    xgrid = config.mesh.centroids
+    xgrid.requires_grad_(True)
+    criterion = nn.MSELoss()
+    def step_to_timepoint(model, init, n_target):
+        current_sol = init
+        for n in range(n_target):
+            bath_preds = model(xgrid.reshape((-1,1))).flatten()
+            grads = torch.autograd.grad(bath_preds, xgrid, grad_outputs=torch.ones_like(bath_preds), create_graph=True)[0]
+            source = torch.zeros_like(current_sol)
+            source[:,1] = -config.g*current_sol[:,0]*grads
+            current_sol = config.scheme.vectorstep(current_sol) + dt*source
+        return current_sol
+    def compute_loss(predicted, target):
+        return criterion(predicted[:,1], target[:,1])
+    
+    init = dataset[0,:,:]
+    optim = torch.optim.Adam(model.parameters(), lr=0.0005)
+    calc_iters = lambda n: 15 if n<N/5 else 5 if n<3*N/5 else 1
+    # iters_per_timestep = 5
+    # first_timestep_boost = 3
+    history = []
+    log_freq = max(math.floor(epochs/4), 1) # Max 4 epochs are logged, and we log first and last timestep loss
+    # running_loss = 0.
+    # loss_updates = 0
+    for epoch in range(epochs):
+        # batch = 0
+        printepoch = True if epoch%log_freq==(log_freq-1) else False
+        # print(f'INFO: Starting epoch {epoch+1}')
+        first_timestep_loss = 0.
+        last_timestep_loss = 0.
+        for n in range(N-1):
+            # if printepoch and (n in [0, int((N-2)/3), int(2*(N-2)/3), N-2]):
+            #     print(f'INFO: Targeting timestep {n+1} / {N-1}')
+            target = dataset[n+1,:,:]
+            iters = calc_iters(n)
+            # iters *= first_timestep_boost if n==0 else 1
+            for it in range(iters):
+                optim.zero_grad()
+                preds = step_to_timepoint(model, init, n+1)
+                loss = compute_loss(preds, target)
+                loss.backward()
+                optim.step()
+                history.append(loss.item())
+                if n==0:
+                    first_timestep_loss += loss.item()
+                elif n==(N-2):
+                    last_timestep_loss += loss.item()
+        if printepoch:
+            first_avg_loss = first_timestep_loss/(calc_iters(0))
+            last_avg_loss = last_timestep_loss/calc_iters(N-2)
+            print(f'Epoch = {epoch+1}  first_step_loss = {first_avg_loss:5.2e}  last_step_loss = {last_avg_loss:5.2e}')
+
+
+        #     if torch.any(Q_batch.isnan()):
+        #         raise ValueError(f'ERROR: Encountered NaN in input at epoch {epoch}, batch {batch}')
+        #     optim.zero_grad()
+        #     loss = compute_loss(model, coord_batch, Q_batch, target_batch)
+            
+        #     # outputs = model(inputs)
+        #     # loss = loss_fn(outputs, targets)
+        #     loss.backward()
+        #     optim.step()
+        #     history.append(loss.item())
+        #     running_loss += loss.item()
+        #     loss_updates += 1
+        #     # batch += 1
+        # if epoch%log_freq==(log_freq-1):
+        #     print(f'Epoch = {epoch+1}  avg loss = {running_loss/loss_updates:5.2e}')
+        #     running_loss = 0.0
+        #     loss_updates = 0
+    return history
+
+    
+    
