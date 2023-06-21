@@ -1,5 +1,7 @@
 # Numerics-informed neural networks and inverse problems with hyperbolic balance laws
 
+[![DOI](https://zenodo.org/badge/598619926.svg)](https://zenodo.org/badge/latestdoi/598619926)
+
 This repository was created to support my Master's thesis *Numerics-informed neural networks and inverse problems with hyperbolic balance laws* with numerical experiments and visualizations.
 The thesis was written during the spring of 2023 under the supervision of Kjetil Olsen Lye at Sintef.
 
