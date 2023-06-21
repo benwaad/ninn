@@ -1,20 +1,15 @@
-# AI assisted numerics for inverse problems in nonlinear transport
+# Numerics-informed neural networks and inverse problems with hyperbolic balance laws
 
-This repository was created to support my Master's thesis *AI assisted numerics for inverse problems in nonlinear transport* with numerical experiments and visualizations.
+This repository was created to support my Master's thesis *Numerics-informed neural networks and inverse problems with hyperbolic balance laws* with numerical experiments and visualizations.
 The thesis was written during the spring of 2023 under the supervision of Kjetil Olsen Lye at Sintef.
 
 ## Contents
+
 The contents of the repository is organized in folders corresponding to the different sections of the thesis.
-The code is written in Python, possibly with influence from established packages in Matlab.
+The code is written in Python, mostly using the PyTorch framework for automatic differentiation.
 
-### ODE
+## Word of advice
 
-Uses neural networks to learn the right hand side of an ordinary differential equation.
-Explores how the size of the training set impacts the error of the network approximation.
-
-### Conservation
-
-Contains utilities for numerically solving hyperbolic conservation laws.
-Influenced by the Matlab package [COMPACK](https://github.com/ulriksf/compack).
-
+The code in files named `plot` or `train` are generally very specialized, and may not be easily applicable to different usecases.
+However, the code in files named `flux`, `models`, and `tools` are abstract enough to be reused.
 
